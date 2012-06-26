@@ -201,7 +201,7 @@ if ( !is_dir( $swarmConfig->storage->cacheDir ) || !is_writable( $swarmConfig->s
 // The value in settings file is for changes by the local administrator.
 // this one is for internal changes, e.g. to be increased when for example
 // ./js/run.js changes significantly.
-$refresh_control = 4; // 2012-06-11
+$refresh_control = 5; // window.opener –Krinkle 2012-06-25
 $swarmConfig->client->refresh_control += $refresh_control;
 
 

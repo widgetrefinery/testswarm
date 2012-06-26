@@ -1,10 +1,7 @@
 /**
- * JavaScript file to included by the test suite page that it loaded
- * inside the iframe on the "run" pages. This injection must be done
- * by the guest page, it can't be loaded by TestSwarm.
- * Example:
- * - https://github.com/jquery/jquery/blob/master/test/data/testrunner.js
- * - https://github.com/jquery/jquery/blob/master/test/index.html
+ * JavaScript file to be included by a test suite, which is then opened
+ * in a client from the "run" page. This injection must be taken care of
+ * by the guest page, TestSwarm can't do this itself.
  *
  * @author John Resig, 2008-2011
  * @author Timo Tijhof, 2012
@@ -14,7 +11,7 @@
 /*global jQuery, $, QUnit, Test, JSSpec, JsUnitTestManager, SeleniumTestResult, LOG, doh, Screw*/
 /*jshint forin:false, strict:false, loopfunc:true, browser:true, jquery:true*/
 (function (undefined) {
-	var	DEBUG, doPost, search, url, index, submitTimeout, curHeartbeat,
+	var DEBUG, doPost, search, url, index, submitTimeout, curHeartbeat,
 		beatRate, testFrameworks, onErrorFnPrev;
 
 	DEBUG = false;
@@ -26,7 +23,7 @@
 	beatRate = 20;
 
 	try {
-		doPost = !!window.parent.postMessage;
+		doPost = !!window.opener.postMessage;
 	} catch ( e ) {}
 
 	if ( index !== -1 ) {
@@ -128,7 +125,7 @@
 			}
 
 			if ( !DEBUG ) {
-				window.parent.postMessage( query, '*' );
+				window.opener.postMessage( query, '*' );
 			}
 
 		} else {

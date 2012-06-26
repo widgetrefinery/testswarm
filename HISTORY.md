@@ -54,6 +54,7 @@ Complete list of issues solved in the 1.0.0 milestone:
   which may have lost network connection, crashed or else. Also used to keep the
   client side configuration up to date to allow long-live runner clients that
   don't run with old configurations.
+* The RunPage now uses a new window instead of an iframe to run the test suite.
 
 ### User agents
 
@@ -98,6 +99,7 @@ Complete list of issues solved in the 1.0.0 milestone:
 * (#189) Shouldn't distribute runs that are being run already.
 * job.js should keep refreshing even when everything is complete and "reset" happens.
 * (#191) Preserve other window.onerror handlers (if there are any).
+* (#195) RunPage should not use iframes for testing.
 
 ### Other changes
 

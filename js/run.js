@@ -7,7 +7,7 @@
  * @package TestSwarm
  */
 (function ( $, SWARM, undefined ) {
-	var currRunId, currRunUrl, testTimeout, pauseTimer, cmds, errorOut;
+	var currRunId, currRunUrl, testTimeout, pauseTimer, cmds, errorOut, testWindow;
 
 	function msg( htmlMsg ) {
 		$( '#msg' ).html( htmlMsg );
@@ -93,17 +93,48 @@
 		}, getTests, runTests );
 	}
 
-	function cancelTest() {
+	/**
+	 * Cleans up testTimeout and testWindow.
+	 *
+	 * @return jQuery Promise
+	 */
+	function cleanupTest() {
+		var closeStartTime, closeMaxTime,
+			d = jQuery.Deferred();
+
 		if ( testTimeout ) {
 			clearTimeout( testTimeout );
 			testTimeout = 0;
 		}
 
-		$( 'iframe' ).remove();
+		if ( testWindow && !testWindow.closed ) {
+			//closeStartTime = +new Date();
+			closeMaxTime = ( +new Date() ) + ( SWARM.conf.client.closeWindowTimeout * 1000 );
+			testWindow.close();
+			setTimeout(function pollTestWindowClosed() {
+				if ( ( +new Date() ) > closeMaxTime ) {
+					d.reject();
+				} else if ( testWindow && !testWindow.closed ) {
+					// Keep polling until its closed or closeMaxTime reached.
+					setTimeout( pollTestWindowClosed, 10 );
+				} else {
+					testWindow = null;
+					d.resolve();
+				}
+			}, 10 );
+		} else {
+			d.resolve();
+		}
+
+		return d.promise();
 	}
 
 	function testTimedout( runInfo ) {
-		cancelTest();
+		cleanupTest();
+		// Don't use the cleanupTest promise,
+		// the abort should be reported to the swarm right away,
+		// regardless of whether the window has closed yet.
+		// The next runDone/getTests call handles that instead.
 		retrySend(
 			{
 				action: 'saverun',
@@ -135,7 +166,7 @@
 	 * @param data Object: Reponse from api.php?action=getrun
 	 */
 	function runTests( data ) {
-		var norun_msg, timeLeft, runInfo, params, iframe;
+		var norun_msg, timeLeft, runInfo, params;
 
 		if ( !$.isPlainObject( data ) || data.error ) {
 			// Handle session timeout, where server sends back "Username required."
@@ -158,32 +189,37 @@
 
 				log( 'Running ' + ( runInfo.desc || '' ) + ' tests...' );
 
-				iframe = document.createElement( 'iframe' );
-				iframe.width = 1000;
-				iframe.height = 600;
-				iframe.className = 'test-runner-frame';
-				iframe.src = currRunUrl + (currRunUrl.indexOf( '?' ) > -1 ? '&' : '?') + $.param({
-					// Cache buster
-					'_' : new Date().getTime(),
-					// Homing signal for inject.js so that it can find its target for action=saverun
-					"swarmURL" : window.location.protocol + "//" + window.location.host + SWARM.conf.web.contextpath
-						+ "index.php?"
-						+ $.param({
-							status: 2, // ResultAction::STATE_FINISHED
-							run_id: currRunId,
-							client_id: SWARM.client_id,
-							run_token: SWARM.run_token,
-							results_id: runInfo.resultsId,
-							results_store_token: runInfo.resultsStoreToken
-						})
+				// Usually by now everything is already cleaned up, but to avoid building
+				// up a huge amount of garbage windows over time, we require that cleanup
+				// is finished (if it is already clean, it will resolve the promise right
+				// away).
+				cleanupTest().done(function () {
+					testWindow = window.open(
+						currRunUrl + (currRunUrl.indexOf( '?' ) > -1 ? '&' : '?') + $.param({
+							// Cache buster
+							'_' : new Date().getTime(),
+							// Homing signal for inject.js so that it can find its target for action=saverun
+							'swarmURL' : window.location.protocol + '//' + window.location.host + SWARM.conf.web.contextpath +
+								'index.php?' +
+								$.param({
+									status: 2, // ResultAction::STATE_FINISHED
+									run_id: currRunId,
+									client_id: SWARM.client_id,
+									run_token: SWARM.run_token,
+									results_id: runInfo.resultsId,
+									results_store_token: runInfo.resultsStoreToken
+								})
+						}),
+						// Use a name to make sure we won't have multiple windows open.
+						// In theory the opened window is always closed. Just in case..
+						'test_runner_window'
+					);
+
+					// Timeout after a period of time
+					testTimeout = setTimeout( function () {
+						testTimedout( runInfo );
+					}, SWARM.conf.client.runTimeout * 1000 );
 				});
-
-				$( '#iframes' ).append( iframe );
-
-				// Timeout after a period of time
-				testTimeout = setTimeout( function () {
-					testTimedout( runInfo );
-				}, SWARM.conf.client.runTimeout * 1000 );
 
 				return;
 			}
@@ -191,7 +227,7 @@
 		}
 
 		// If we're still here then either there are no new tests to run, or this is a call
-		// triggerd by an iframe to continue the loop. We'll do so a short timeout,
+		// triggerd by a test window to continue the loop. We'll do a short timeout,
 		// optionally replacing the message by data.timeoutMsg
 		clearTimeout( pauseTimer );
 
@@ -216,13 +252,13 @@
 
 	}
 
-	// Needs to be a publicly exposed function,
-	// so that when inject.js does a <form> submission,
-	// it can call this from within the frame
-	// as window.parent.SWARM.runDone();
+	// Needs to be a publicly exposed function, so that when inject.js
+	// does a (potentially cross-domain) <form> submission to the,
+	// SaverunPage, it (testWindow) can call this as window.opener.SWARM.runDone().
 	SWARM.runDone = function () {
-		cancelTest();
-		runTests({ timeoutMsg: 'Cooling down.' });
+		cleanupTest().done(function () {
+			runTests({ timeoutMsg: 'Cooling down.' });
+		});
 	};
 
 	function handleMessage(e) {

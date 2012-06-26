@@ -23,6 +23,7 @@
 		"pingTime": 30,
 		"pingTimeMargin": 10,
 		"runTimeout": 180,
+		"closeWindowTimeout": 3,
 		"saveReqTimeout": 10,
 		"saveRetryMax": 3,
 		"saveRetrySleep": 5,
