@@ -174,6 +174,65 @@ class AddjobAction extends Action {
 
 		}
 
+		$mostRecentSuccess = $db->getRow(str_queryf(
+			"SELECT j.id
+			FROM jobs j
+			JOIN runs r ON j.id = r.job_id
+			JOIN runresults rr on r.id = rr.run_id
+			WHERE j.user_id = %u
+			GROUP BY j.id
+			HAVING MAX(rr.fail) = 0 AND MAX(rr.error) = 0
+			ORDER BY j.id DESC LIMIT 1;",
+			$userId
+		));
+		if ($mostRecentSuccess) {
+			$mostRecentSuccess = $mostRecentSuccess->id;
+		} else {
+			$mostRecentSuccess = $newJobId;
+		}
+		$limit = $db->getRow(str_queryf(
+			"SELECT id
+			FROM jobs
+			WHERE user_id = %u
+			ORDER BY id DESC
+			LIMIT " . ($conf->storage->numJobs - 1) . ",1;",
+			$userId
+		));
+		if ($limit) {
+			$db->query(str_queryf(
+				"DELETE ru
+				FROM jobs j
+				LEFT JOIN runs r on j.id = r.job_id
+				LEFT JOIN run_useragent ru on r.id = ru.run_id
+				WHERE j.user_id = %u
+				AND j.id != %u
+				AND j.id < %u;",
+				$userId,
+				$mostRecentSuccess,
+				$limit->id
+			));
+			$db->query(str_queryf(
+				"DELETE r
+				FROM jobs j
+				LEFT JOIN runs r on j.id = r.job_id
+				WHERE j.user_id = %u
+				AND j.id != %u
+				AND j.id < %u;",
+				$userId,
+				$mostRecentSuccess,
+				$limit->id
+			));
+			$db->query(str_queryf(
+				"DELETE FROM jobs
+				WHERE user_id = %u
+				AND id != %u
+				AND id < %u;",
+				$userId,
+				$mostRecentSuccess,
+				$limit->id
+			));
+		}
+
 		$this->setData(array(
 			"id" => $newJobId,
 			"runTotal" => count( $runs ),

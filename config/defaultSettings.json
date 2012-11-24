@@ -30,7 +30,8 @@
 		"refreshControl": 0
 	},
 	"storage": {
-		"cacheDir": "$1/cache"
+		"cacheDir": "$1/cache",
+		"numJobs": "8"
 	},
 	"userAgents": {},
 	"browserSets": {},
