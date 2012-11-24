@@ -222,8 +222,9 @@ class AddjobAction extends Action {
 				$mostRecentSuccess,
 				$limit->id
 			));
-			$db->query(str_queryf(
-				"DELETE FROM jobs
+			$oldJobs = $db->getRows(str_queryf(
+				"SELECT id, name
+				FROM jobs
 				WHERE user_id = %u
 				AND id != %u
 				AND id < %u;",
@@ -231,6 +232,48 @@ class AddjobAction extends Action {
 				$mostRecentSuccess,
 				$limit->id
 			));
+			if ($oldJobs) {
+				$nameRegex = "/^[a-zA-Z0-9 _.\\-]+$/";
+				$projectName = $request->getVal( "authUsername" );
+				$testDir = "";
+				if ($conf->storage->testDir) {
+					if (!preg_match($nameRegex, $projectName) || $projectName == "..") {
+						error_log( "bad project name: " . $projectName );
+					} else if (posix_getuid() == 0) {
+						error_log( "refusing to clean testDir as root" );
+					} else {
+						$testDir = $conf->storage->testDir . "/" . $projectName. "/";
+					}
+				}
+				foreach ( $oldJobs as $oldJob ) {
+					$jobName = $oldJob->name;
+					if ($testDir) {
+						if (!preg_match($nameRegex, $jobName) || $jobName == "..") {
+							error_log( "bad job name: " . $jobName );
+						} else if (!is_dir($testDir . $jobName)) {
+							error_log( "no such dir: " . $testDir . $jobName );
+						} else {
+							/* !!! C A U T I O N !!!
+							!!! This is a dangerous operation. Use at your own risk.
+							!!! It will delete the folder pointer to by
+							!!! $testDir/$projectName/$jobName but a misconfiguration
+							!!! or a malicious user can cause unexpected results,
+							!!! althought the regex and uid checks above should limit
+							!!! the potential damage.
+							*/
+							$error = shell_exec( "rm -fr '" . $testDir . $jobName . "'" );
+							if ($error) {
+								error_log($error);
+							}
+						}
+					}
+					$db->query(str_queryf(
+						"DELETE FROM jobs
+						WHERE id = %u",
+						$oldJob->id
+					));
+				}
+			}
 		}
 
 		$this->setData(array(

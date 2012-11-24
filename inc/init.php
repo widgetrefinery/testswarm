@@ -197,6 +197,8 @@ if ( !is_dir( $swarmConfig->storage->cacheDir ) || !is_writable( $swarmConfig->s
 	swarmInitError( 'Caching directory must exist and be writable by the webserver.' );
 }
 
+$swarmConfig->storage->testDir = str_replace( "$1", $swarmInstallDir, $swarmConfig->storage->testDir );
+
 // Refresh control
 // The value in settings file is for changes by the local administrator.
 // this one is for internal changes, e.g. to be increased when for example
