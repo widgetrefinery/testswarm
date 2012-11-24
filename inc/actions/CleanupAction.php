@@ -17,6 +17,13 @@ class CleanupAction extends Action {
 		$conf = $this->getContext()->getConf();
 		$request = $this->getContext()->getRequest();
 
+		// As a security measure, only allow requests from localhost
+		$ip = $request->getIP();
+		if ($ip != "127.0.0.1" && $ip != "::1") {
+			$this->setError( "unauthorized" );
+			return false;
+		}
+
 		$resetTimedoutRuns = 0;
 
 		// Get clients that are considered disconnected (not responding to the latest pings).
@@ -59,6 +66,26 @@ class CleanupAction extends Action {
 				));
 			}
 		}
+
+		// Delete results that reference nonexistent runs
+		$db->query(str_queryf(
+			"DELETE FROM runresults
+			WHERE run_id NOT IN (SELECT id FROM runs);"
+		));
+		// Delete clients that have no results and have not responded in the last 30 minutes
+		$db->query(str_queryf(
+			"DELETE FROM clients
+			WHERE id NOT IN (SELECT DISTINCT(client_id) FROM runresults)
+			AND updated < %s;",
+			swarmdb_dateformat( time() - 30 * 60 )
+		));
+		// Delete users that are not registered and have no clients
+		$db->query(str_queryf(
+			"DELETE FROM users
+			WHERE password = repeat('\\0', 40)
+			AND auth = repeat('\\0', 40)
+			AND id NOT IN (SELECT DISTINCT user_id FROM clients);"
+		));
 
 		$this->setData(array(
 			"resetTimedoutRuns" => $resetTimedoutRuns,
